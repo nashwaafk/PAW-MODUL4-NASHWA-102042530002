@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 // Homepage
-Route::get('/', fn() => Auth::check() ? redirect()->route('dashboard') : redirect()->route('login'));
+Route::get('/', fn () => Auth::check() ? redirect()->route('dashboard') : redirect()->route('login'));
 
 // Guest Authentication Routes
 Route::middleware('guest')->group(function () {
@@ -25,53 +25,60 @@ Route::middleware('guest')->group(function () {
         ->name('register.post');
 });
 
-// TODO 3: Bungkus route terproteksi dengan middleware 'auth', pisahkan route khusus 'role:dosen' dan 'role:mahasiswa', serta aktifkan route penilaian & export CSV
+// Modul 4 - Semua route di bawah ini memerlukan login
+Route::middleware(['auth'])->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// Logout
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
 
-// Dashboard
-Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    // Halaman untuk Dosen maupun Mahasiswa
+    Route::get('/courses', [MataKuliahController::class, 'index'])->name('courses.index');
+    Route::get('/courses/{course}', [MataKuliahController::class, 'show'])
+        ->whereNumber('course')->name('courses.show');
 
-// Profil Pengguna (Edit & Update)
-Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    // Hanya Dosen
+    Route::middleware(['role:dosen'])->group(function () {
+        Route::get('/courses/create', [MataKuliahController::class, 'create'])->name('courses.create');
+        Route::post('/courses', [MataKuliahController::class, 'store'])->name('courses.store');
+        Route::get('/courses/{course}/edit', [MataKuliahController::class, 'edit'])->whereNumber('course')->name('courses.edit');
+        Route::put('/courses/{course}', [MataKuliahController::class, 'update'])->whereNumber('course')->name('courses.update');
+        Route::delete('/courses/{course}', [MataKuliahController::class, 'destroy'])->whereNumber('course')->name('courses.destroy');
 
-// Mata Kuliah (Katalog & Detail Kelas untuk Dosen & Mahasiswa)
-Route::get('/courses', [MataKuliahController::class, 'index'])->name('courses.index');
-Route::get('/courses/{course}', [MataKuliahController::class, 'show'])->whereNumber('course')->name('courses.show');
+        Route::patch('/courses/{course}/enrollments/{user}/approve', [MataKuliahController::class, 'approveStudent'])
+            ->whereNumber('course')->whereNumber('user')->name('courses.enrollments.approve');
+        Route::patch('/courses/{course}/enrollments/{user}/reject', [MataKuliahController::class, 'rejectStudent'])
+            ->whereNumber('course')->whereNumber('user')->name('courses.enrollments.reject');
+        Route::delete('/courses/{course}/unenroll/{user}', [MataKuliahController::class, 'unenrollStudent'])
+            ->whereNumber('course')->whereNumber('user')->name('courses.unenroll');
 
-// Manajemen Mata Kuliah (Khusus Dosen)
-Route::get('/courses/create', [MataKuliahController::class, 'create'])->name('courses.create');
-Route::post('/courses', [MataKuliahController::class, 'store'])->name('courses.store');
-Route::get('/courses/{course}/edit', [MataKuliahController::class, 'edit'])->whereNumber('course')->name('courses.edit');
-Route::put('/courses/{course}', [MataKuliahController::class, 'update'])->whereNumber('course')->name('courses.update');
-Route::delete('/courses/{course}', [MataKuliahController::class, 'destroy'])->whereNumber('course')->name('courses.destroy');
+        Route::get('/courses/{course}/materials/create', [MaterialController::class, 'create'])->whereNumber('course')->name('materials.create');
+        Route::post('/courses/{course}/materials', [MaterialController::class, 'store'])->whereNumber('course')->name('materials.store');
+        Route::get('/materials/{material}/edit', [MaterialController::class, 'edit'])->whereNumber('material')->name('materials.edit');
+        Route::put('/materials/{material}', [MaterialController::class, 'update'])->whereNumber('material')->name('materials.update');
+        Route::delete('/materials/{material}', [MaterialController::class, 'destroy'])->whereNumber('material')->name('materials.destroy');
 
-// Persetujuan & Manajemen Mahasiswa di Kelas (Khusus Dosen)
-Route::patch('/courses/{course}/enrollments/{user}/approve', [MataKuliahController::class, 'approveStudent'])->whereNumber('course')->whereNumber('user')->name('courses.enrollments.approve');
-Route::patch('/courses/{course}/enrollments/{user}/reject', [MataKuliahController::class, 'rejectStudent'])->whereNumber('course')->whereNumber('user')->name('courses.enrollments.reject');
-Route::delete('/courses/{course}/unenroll/{user}', [MataKuliahController::class, 'unenrollStudent'])->whereNumber('course')->whereNumber('user')->name('courses.unenroll');
+        Route::get('/courses/{course}/assignments/create', [AssignmentController::class, 'create'])->whereNumber('course')->name('assignments.create');
+        Route::post('/courses/{course}/assignments', [AssignmentController::class, 'store'])->whereNumber('course')->name('assignments.store');
+        Route::get('/assignments/{assignment}/edit', [AssignmentController::class, 'edit'])->whereNumber('assignment')->name('assignments.edit');
+        Route::put('/assignments/{assignment}', [AssignmentController::class, 'update'])->whereNumber('assignment')->name('assignments.update');
+        Route::delete('/assignments/{assignment}', [AssignmentController::class, 'destroy'])->whereNumber('assignment')->name('assignments.destroy');
+        Route::get('/assignments/{assignment}/submissions', [AssignmentController::class, 'submissions'])
+            ->whereNumber('assignment')->name('assignments.submissions');
 
-// Materi Perkuliahan / Materials (Khusus Dosen)
-Route::get('/courses/{course}/materials/create', [MaterialController::class, 'create'])->whereNumber('course')->name('materials.create');
-Route::post('/courses/{course}/materials', [MaterialController::class, 'store'])->whereNumber('course')->name('materials.store');
-Route::get('/materials/{material}/edit', [MaterialController::class, 'edit'])->whereNumber('material')->name('materials.edit');
-Route::put('/materials/{material}', [MaterialController::class, 'update'])->whereNumber('material')->name('materials.update');
-Route::delete('/materials/{material}', [MaterialController::class, 'destroy'])->whereNumber('material')->name('materials.destroy');
+        // Endpoint baru untuk penilaian dan unduh CSV
+        Route::patch('/submissions/{submission}/grade', [SubmissionController::class, 'grade'])
+            ->whereNumber('submission')->name('submissions.grade');
+        Route::get('/assignments/{assignment}/export-csv', [SubmissionController::class, 'exportCsv'])
+            ->whereNumber('assignment')->name('assignments.export-csv');
+    });
 
-// Tugas & Evaluasi / Assignments (Khusus Dosen)
-Route::get('/courses/{course}/assignments/create', [AssignmentController::class, 'create'])->whereNumber('course')->name('assignments.create');
-Route::post('/courses/{course}/assignments', [AssignmentController::class, 'store'])->whereNumber('course')->name('assignments.store');
-Route::get('/assignments/{assignment}/edit', [AssignmentController::class, 'edit'])->whereNumber('assignment')->name('assignments.edit');
-Route::put('/assignments/{assignment}', [AssignmentController::class, 'update'])->whereNumber('assignment')->name('assignments.update');
-Route::delete('/assignments/{assignment}', [AssignmentController::class, 'destroy'])->whereNumber('assignment')->name('assignments.destroy');
-Route::get('/assignments/{assignment}/submissions', [AssignmentController::class, 'submissions'])->whereNumber('assignment')->name('assignments.submissions');
-
-// Penilaian Tugas & Export CSV (Khusus Dosen - Aktifkan di TODO 3)
-// Route::patch('/submissions/{submission}/grade', [SubmissionController::class, 'grade'])->whereNumber('submission')->name('submissions.grade');
-// Route::get('/assignments/{assignment}/export-csv', [SubmissionController::class, 'exportCsv'])->whereNumber('assignment')->name('assignments.export-csv');
-
-// Pengajuan Pendaftaran Kelas & Pengumpulan Tugas (Khusus Mahasiswa)
-Route::post('/courses/{course}/enroll-request', [MataKuliahController::class, 'enrollRequest'])->whereNumber('course')->name('courses.enroll-request');
-Route::post('/assignments/{assignment}/submit', [SubmissionController::class, 'store'])->whereNumber('assignment')->name('submissions.store');
+    // Hanya Mahasiswa
+    Route::middleware(['role:mahasiswa'])->group(function () {
+        Route::post('/courses/{course}/enroll-request', [MataKuliahController::class, 'enrollRequest'])
+            ->whereNumber('course')->name('courses.enroll-request');
+        Route::post('/assignments/{assignment}/submit', [SubmissionController::class, 'store'])
+            ->whereNumber('assignment')->name('submissions.store');
+    });
+});

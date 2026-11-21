@@ -54,23 +54,66 @@ class SubmissionController extends Controller
         return back()->with('success', 'Jawaban tugas Anda berhasil disimpan ke sistem.');
     }
 
+    // Modul 4 - Dosen memberikan nilai dan catatan pada satu submission
     public function grade(Request $request, Submission $submission): RedirectResponse
     {
-        // TODO 5a (grade): Cek apakah dosen adalah pengampu mata kuliah, validasi nilai (0-100) & catatan_dosen, lalu update submission.
-        // 1. Pastikan $submission->assignment->course->dosen_id === Auth::id(), jika tidak abort(403).
-        // 2. Validasi input 'nilai' (required|integer|min:0|max:100) dan 'catatan_dosen' (nullable|string|max:1000).
-        // 3. Simpan perubahan menggunakan $submission->update(...) dan redirect back() dengan pesan sukses.
+        if (!Auth::user()->isDosen() || $submission->assignment->course->dosen_id !== Auth::id()) {
+            abort(403, 'Akses ditolak. Anda bukan dosen pengampu mata kuliah ini.');
+        }
 
-        abort(501, 'Fitur belum diimplementasikan');
+        $validated = $request->validate([
+            'nilai' => ['required', 'integer', 'min:0', 'max:100'],
+            'catatan_dosen' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $submission->update($validated);
+
+        return back()->with('success', 'Nilai dan catatan dosen berhasil disimpan.');
     }
 
+    // Modul 4 - Ekspor nilai seluruh mahasiswa approved pada tugas terkait
     public function exportCsv(Assignment $assignment): StreamedResponse
     {
-        // TODO 5b (exportCsv): Cek kepemilikan dosen, lalu gunakan response()->streamDownload() dan fputcsv() untuk mengunduh data nilai mahasiswa.
-        // 1. Pastikan $assignment->course->dosen_id === Auth::id(), jika tidak abort(403).
-        // 2. Muat relasi course.approvedStudents dan submissions dari $assignment.
-        // 3. Kembalikan response()->streamDownload(...) yang menulis header & baris CSV menggunakan fopen('php://output', 'w') dan fputcsv().
+        if (!Auth::user()->isDosen() || $assignment->course->dosen_id !== Auth::id()) {
+            abort(403, 'Akses ditolak. Anda bukan dosen pengampu mata kuliah ini.');
+        }
 
-        abort(501, 'Fitur belum diimplementasikan');
+        $assignment->load(['course.approvedStudents', 'submissions.user']);
+        $students = $assignment->course->approvedStudents;
+        $submissions = $assignment->submissions->keyBy('user_id');
+        $filename = 'rekap_nilai_' . $assignment->course->kode_mk . '_tugas_' . $assignment->id . '.csv';
+
+        return response()->streamDownload(function () use ($students, $submissions) {
+            $handle = fopen('php://output', 'w');
+
+            // UTF-8 BOM supaya karakter Indonesia dibaca baik oleh Excel.
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, [
+                'NIM',
+                'Nama Mahasiswa',
+                'Status Pengumpulan',
+                'Waktu Pengumpulan',
+                'Nilai',
+                'Status Nilai',
+                'Catatan Dosen',
+            ]);
+
+            foreach ($students as $student) {
+                $submission = $submissions->get($student->id);
+
+                fputcsv($handle, [
+                    $student->nomor_induk ?? '',
+                    $student->name,
+                    $submission ? 'Sudah Mengumpulkan' : 'Belum Mengumpulkan',
+                    $submission?->submitted_at?->format('Y-m-d H:i:s') ?? '',
+                    $submission?->nilai ?? '',
+                    $submission?->status_nilai ?? 'Belum Dinilai',
+                    $submission?->catatan_dosen ?? '',
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 }

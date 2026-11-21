@@ -20,6 +20,8 @@ class MataKuliahController extends Controller
 
         $user = Auth::user();
         $search = $request->input('search');
+        $semester = $request->query('semester');
+        $sort = $request->query('sort', 'nama_asc');
 
         if ($user->isDosen()) {
             // Dosen mengelola mata kuliah miliknya sendiri
@@ -37,8 +39,26 @@ class MataKuliahController extends Controller
             });
         }
 
-        // TODO 4: Tambahkan logika filter berdasarkan parameter 'semester' dan pengurutan berdasarkan parameter 'sort' (nama_asc, nama_desc, sks_desc, sks_asc)
-        $query->orderBy('nama_mk');
+        // Modul 4 - Filter semester
+        if ($semester) {
+            $query->where('semester', $semester);
+        }
+
+        // Modul 4 - Sorting nama mata kuliah atau SKS
+        switch ($sort) {
+            case 'nama_desc':
+                $query->orderBy('nama_mk', 'desc');
+                break;
+            case 'sks_desc':
+                $query->orderBy('sks', 'desc');
+                break;
+            case 'sks_asc':
+                $query->orderBy('sks', 'asc');
+                break;
+            default:
+                $query->orderBy('nama_mk', 'asc');
+                break;
+        }
 
         $courses = $query->with('dosen')
             ->withCount([
@@ -49,7 +69,7 @@ class MataKuliahController extends Controller
             ->paginate(9)
             ->withQueryString();
 
-        $semesters = MataKuliah::select('semester')->distinct()->pluck('semester');
+        $semesters = MataKuliah::select('semester')->distinct()->orderBy('semester')->pluck('semester');
 
         return view('courses.index', compact('courses', 'semesters'));
     }
